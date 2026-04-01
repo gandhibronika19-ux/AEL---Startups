@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Portfolio Dashboard</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+</head>
+<body class="bg-gray-100">
+
+<!-- SIDEBAR -->
+<div class="w-64 h-screen bg-gray-900 text-white fixed">
+  <div class="p-4 text-xl font-bold">Portfolio</div>
+</div>
+
+<!-- HEADER -->
+<div class="ml-64 p-4 bg-white shadow flex justify-between">
+  <h1 class="text-xl font-semibold">Investment Dashboard</h1>
+  <span id="updated"></span>
+</div>
+
+<!-- KPI CARDS -->
+<div class="ml-64 p-6 grid grid-cols-4 gap-4" id="kpis"></div>
+
+<!-- FILTERS -->
+<div class="ml-64 px-6 flex gap-4 mb-4">
+  <select id="sectorFilter" class="border p-2 rounded">
+    <option value="All">All Sectors</option>
+  </select>
+
+  <select id="geoFilter" class="border p-2 rounded">
+    <option value="All">All Geography</option>
+  </select>
+
+  <button onclick="setMetric('revenue')" class="bg-blue-600 text-white px-4 py-2 rounded">Revenue</button>
+  <button onclick="setMetric('ebitda')" class="bg-gray-200 px-4 py-2 rounded">EBITDA</button>
+</div>
+
+<!-- CHARTS -->
+<div class="ml-64 p-6 grid grid-cols-2 gap-6">
+  <div class="bg-white p-4 rounded-2xl shadow">
+    <canvas id="sectorChart"></canvas>
+  </div>
+
+  <div class="bg-white p-4 rounded-2xl shadow">
+    <canvas id="returnsChart"></canvas>
+  </div>
+</div>
+
+<!-- TABLE -->
+<div class="ml-64 p-6">
+  <div class="bg-white p-4 rounded-2xl shadow">
+    <table class="w-full text-left">
+      <thead>
+        <tr class="border-b">
+          <th>Company</th>
+          <th>Sector</th>
+          <th>Geo</th>
+          <th>Investment</th>
+          <th>Value</th>
+          <th>MOIC</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+
+// ---------------- DATA ----------------
+const data = [
+  {name:"Startup A", sector:"SaaS", geo:"India", investment:5, value:15, irr:25},
+  {name:"Startup B", sector:"Manufacturing", geo:"India", investment:10, value:12, irr:12},
+  {name:"Startup C", sector:"Fintech", geo:"Global", investment:8, value:20, irr:30},
+  {name:"Startup D", sector:"SaaS", geo:"Global", investment:6, value:18, irr:28}
+];
+
+let currentMetric = "revenue";
+
+// ---------------- FILTERS ----------------
+function populateFilters() {
+  const sectors = [...new Set(data.map(d => d.sector))];
+  const geos = [...new Set(data.map(d => d.geo))];
+
+  sectors.forEach(s => {
+    sectorFilter.innerHTML += `<option>${s}</option>`;
+  });
+
+  geos.forEach(g => {
+    geoFilter.innerHTML += `<option>${g}</option>`;
+  });
+}
+
+// ---------------- FILTER LOGIC ----------------
+function getFilteredData() {
+  return data.filter(d => {
+    return (sectorFilter.value === "All" || d.sector === sectorFilter.value) &&
+           (geoFilter.value === "All" || d.geo === geoFilter.value);
+  });
+}
+
+// ---------------- KPI CALC ----------------
+function updateKPIs(filtered) {
+  let totalInv = filtered.reduce((a,b)=>a+b.investment,0);
+  let totalVal = filtered.reduce((a,b)=>a+b.value,0);
+  let moic = (totalVal/totalInv).toFixed(2);
+  let avgIRR = (filtered.reduce((a,b)=>a+b.irr,0)/filtered.length || 0).toFixed(1);
+
+  kpis.innerHTML = `
+    ${card("Total Invested", totalInv + " Cr")}
+    ${card("Portfolio Value", totalVal + " Cr")}
+    ${card("MOIC", moic + "x")}
+    ${card("Avg IRR", avgIRR + "%")}
+  `;
+}
+
+function card(title, val){
+  return `
+  <div class="bg-white p-4 rounded-2xl shadow">
+    <p class="text-gray-500 text-sm">${title}</p>
+    <h2 class="text-2xl font-bold">${val}</h2>
+  </div>`;
+}
+
+// ---------------- CHARTS ----------------
+let sectorChart, returnsChart;
+
+function updateCharts(filtered) {
+
+  const sectorMap = {};
+  filtered.forEach(d => {
+    sectorMap[d.sector] = (sectorMap[d.sector] || 0) + d.value;
+  });
+
+  const labels = Object.keys(sectorMap);
+  const values = Object.values(sectorMap);
+
+  if(sectorChart) sectorChart.destroy();
+
+  sectorChart = new Chart(document.getElementById('sectorChart'), {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data: values }] }
+  });
+
+  if(returnsChart) returnsChart.destroy();
+
+  returnsChart = new Chart(document.getElementById('returnsChart'), {
+    type: 'bar',
+    data: {
+      labels: filtered.map(d=>d.name),
+      datasets: [{ label: 'MOIC', data: filtered.map(d=> (d.value/d.investment).toFixed(2)) }]
+    }
+  });
+}
+
+// ---------------- TABLE ----------------
+function updateTable(filtered){
+  tableBody.innerHTML = filtered.map(d=>`
+    <tr class="border-b">
+      <td>${d.name}</td>
+      <td>${d.sector}</td>
+      <td>${d.geo}</td>
+      <td>${d.investment}</td>
+      <td>${d.value}</td>
+      <td>${(d.value/d.investment).toFixed(2)}x</td>
+    </tr>
+  `).join('');
+}
+
+// ---------------- MAIN UPDATE ----------------
+function refresh(){
+  const filtered = getFilteredData();
+  updateKPIs(filtered);
+  updateCharts(filtered);
+  updateTable(filtered);
+}
+
+// ---------------- EVENTS ----------------
+sectorFilter.onchange = refresh;
+geoFilter.onchange = refresh;
+
+// ---------------- INIT ----------------
+populateFilters();
+refresh();
+document.getElementById("updated").innerText = "Updated: " + new Date().toLocaleDateString();
+
+</script>
+
+</body>
+</html>
